@@ -18,7 +18,7 @@ HELP += "axe 2 3 4 -s './test' '/home/astute' ==> scp file to host002/3/4 on pur
 HELP += "axe 2 3 4 -s './test' ==> scp file to host002/3/4 to the same place"
 
 USER = 'root'
-PASSWORD = 'donotuseroot!'
+PASSWORD = 'suckmydick!'
 PORT = '22'
 
 if os.environ.get('AXE_USER'):
