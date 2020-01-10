@@ -6,6 +6,7 @@ import struct
 import fcntl
 import termios
 import signal
+import platform
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -18,7 +19,7 @@ HELP += "axe 2 3 4 -s './test' '/home/astute' ==> scp file to host002/3/4 on pur
 HELP += "axe 2 3 4 -s './test' ==> scp file to host002/3/4 to the same place"
 
 USER = 'root'
-PASSWORD = 'suckmydick!'
+PASSWORD = 'donotuseroot!'
 PORT = '22'
 
 if os.environ.get('AXE_USER'):
@@ -50,11 +51,11 @@ def getwinsize():
 
 def ssh(user, password, ip, port=PORT, command=""):
     child = pexpect.spawn('ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no %s@%s -p %s %s' %  (user, ip, port, command), env = {"TERM" : "xterm-256color"})
-    if command == "":
+    if command == "" and "Microsoft" not in platform.platform():
         signal.signal(signal.SIGWINCH, sigwinch_passthrough)  
     child.expect('[P|p]assword:')
     child.sendline(password)
-    if command == "":
+    if command == "" and "Microsoft" not in platform.platform():
         winsize = getwinsize();
         child.setwinsize(winsize[0], winsize[1])
     child.interact()
