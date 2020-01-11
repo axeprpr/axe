@@ -1,159 +1,235 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import sys,re,os
-import pexpect
-import struct
+
 import fcntl
-import termios
-import signal
+import os
 import platform
+import re
+import signal
+import struct
+import sys
+import termios
 
-reload(sys)
-sys.setdefaultencoding('utf8')
+import pexpect
 
-HELP = "help: \n"
-HELP += "axe 1 ==> ssh root@192.222.1.1 (use root password of astute)\n"
-HELP += "axe 10.10.1.1 ==> ssh root@10.10.1.1 (use root password of astute)\n"
-HELP += "axe 2 3 4 -c 'ls -lrt' ==> run command on host002/3/4 and show result\n"
-HELP += "axe 2 3 4 -s './test' '/home/astute' ==> scp file to host002/3/4 on purpose\n" 
-HELP += "axe 2 3 4 -s './test' ==> scp file to host002/3/4 to the same place"
 
-USER = 'root'
-PASSWORD = 'donotuseroot!'
-PORT = '22'
+HELP = """help:
+axe 1 ==> ssh root@192.222.1.1 (use root password of astute)
+axe 10.10.1.1 ==> ssh root@10.10.1.1 (use root password of astute)
+axe 2 3 4 -c 'ls -lrt' ==> run command on host002/3/4 and show result
+axe 2 3 4 -s './test' '/home/astute' ==> scp file to host002/3/4 on purpose
+axe 2 3 4 -s './test' ==> scp file to host002/3/4 to the same place
+"""
 
-if os.environ.get('AXE_USER'):
-    USER = os.environ.get('AXE_USER')
+USER = os.environ.get("AXE_USER", "root")
+PASSWORD = os.environ.get("AXE_PASSWORD", "donotuseroot!")
+PORT = os.environ.get("AXE_PORT", "22")
+HOST_PREFIX = "192.222.1."
+CURRENT_CHILD = None
 
-if os.environ.get('AXE_PASSWORD'):
-    PASSWORD = os.environ.get('AXE_PASSWORD')
 
-if os.environ.get('AXE_PORT'):
-    PORT = os.environ.get('AXE_PORT')
+def sigwinch_passthrough(sig, data):
+    del sig, data
+    if CURRENT_CHILD is None:
+        return
+    rows, cols = getwinsize()
+    CURRENT_CHILD.setwinsize(rows, cols)
 
-def sigwinch_passthrough (sig, data):
-    winsize = getwinsize()
-    global child
-    child.setwinsize(winsize[0],winsize[1])
 
 def getwinsize():
-    """This returns the window size of the child tty.
-    The return value is a tuple of (rows, cols).
-    """
-    if 'TIOCGWINSZ' in dir(termios):
-        TIOCGWINSZ = termios.TIOCGWINSZ
+    """Return the current terminal size as (rows, cols)."""
+    if "TIOCGWINSZ" in dir(termios):
+        ioctl_code = termios.TIOCGWINSZ
     else:
-        TIOCGWINSZ = 1074295912L # Assume
-    s = struct.pack('HHHH', 0, 0, 0, 0)
-    x = fcntl.ioctl(sys.stdout.fileno(), TIOCGWINSZ, s)
-    return struct.unpack('HHHH', x)[0:2]
+        ioctl_code = 1074295912
+    packed = struct.pack("HHHH", 0, 0, 0, 0)
+    data = fcntl.ioctl(sys.stdout.fileno(), ioctl_code, packed)
+    return struct.unpack("HHHH", data)[0:2]
 
-
-def ssh(user, password, ip, port=PORT, command=""):
-    child = pexpect.spawn('ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no %s@%s -p %s %s' %  (user, ip, port, command), env = {"TERM" : "xterm-256color"})
-    if command == "" and "Microsoft" not in platform.platform():
-        signal.signal(signal.SIGWINCH, sigwinch_passthrough)  
-    child.expect('[P|p]assword:')
-    child.sendline(password)
-    if command == "" and "Microsoft" not in platform.platform():
-        winsize = getwinsize();
-        child.setwinsize(winsize[0], winsize[1])
-    child.interact()
-
-def scp(user, password, ip, file, port=PORT, destination=None):
-    if not destination:
-        destination = os.path.dirname(os.path.abspath(file))
-        if not destination.endswith('/'):
-            destination = destination + '/'
-    child = pexpect.spawn('scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -P %s -r %s %s@%s:%s' %  (port, file, user, ip, destination))
-    child.expect('[P|p]assword:')
-    child.sendline(password)
-    child.interact()
 
 def is_domain(domain):
     domain_regex = re.compile(
-        r'(?:[A-Z0-9_](?:[A-Z0-9-_]{0,247}[A-Z0-9])?\.)+(?:[A-Z]{2,6}|[A-Z0-9-]{2,}(?<!-))\Z', 
-        re.IGNORECASE)
-    return True if domain_regex.match(domain) else False
+        r"(?:[A-Z0-9_](?:[A-Z0-9-_]{0,247}[A-Z0-9])?\.)+(?:[A-Z]{2,6}|[A-Z0-9-]{2,}(?<!-))\Z",
+        re.IGNORECASE,
+    )
+    return bool(domain_regex.match(domain))
+
 
 def is_ipv4(address):
     ipv4_regex = re.compile(
-        r'(?:25[0-5]|2[0-4]\d|[0-1]?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}',
-        re.IGNORECASE)
-    return True if ipv4_regex.match(address) else False
+        r"^(?:25[0-5]|2[0-4]\d|[0-1]?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}$",
+        re.IGNORECASE,
+    )
+    return bool(ipv4_regex.match(address))
+
+
+def resolve_host(value):
+    host = str(value).strip()
+    if not host:
+        raise ValueError("Host is empty.")
+    if host.isdigit():
+        number = int(host)
+        if 1 <= number <= 250:
+            return "{}{}".format(HOST_PREFIX, number)
+        raise ValueError("Host number {} is out of range.".format(host))
+    if is_domain(host) or is_ipv4(host):
+        return host
+    raise ValueError("Unsupported host '{}'.".format(host))
+
+
+def normalize_destination(file_path, destination):
+    if destination:
+        if os.path.abspath(os.path.expanduser(destination)).lower() == os.path.expanduser("~").lower():
+            return "~"
+        return destination
+
+    target_dir = os.path.dirname(os.path.abspath(file_path))
+    if not target_dir.endswith("/"):
+        target_dir += "/"
+    return target_dir
+
+
+def expect_and_send_password(child, password):
+    match_index = child.expect([r"[Pp]assword:", pexpect.EOF, pexpect.TIMEOUT], timeout=15)
+    if match_index == 0:
+        child.sendline(password)
+        return
+    if match_index == 1:
+        return
+    raise RuntimeError("Timed out waiting for password prompt.")
+
+
+def interact_with_child(child):
+    global CURRENT_CHILD
+
+    old_handler = None
+    CURRENT_CHILD = child
+    if "Microsoft" not in platform.platform():
+        old_handler = signal.getsignal(signal.SIGWINCH)
+        signal.signal(signal.SIGWINCH, sigwinch_passthrough)
+        rows, cols = getwinsize()
+        child.setwinsize(rows, cols)
+
+    try:
+        child.interact()
+    finally:
+        CURRENT_CHILD = None
+        if old_handler is not None:
+            signal.signal(signal.SIGWINCH, old_handler)
+
+
+def ssh(user, password, ip, port=PORT, command=""):
+    args = [
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-p",
+        str(port),
+        "{}@{}".format(user, ip),
+    ]
+    if command:
+        args.append(command)
+
+    child = pexpect.spawn("ssh", args=args, env={"TERM": "xterm-256color"}, encoding="utf-8")
+    expect_and_send_password(child, password)
+    interact_with_child(child)
+
+
+def scp(user, password, ip, file_path, port=PORT, destination=None):
+    target = normalize_destination(file_path, destination)
+    args = [
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-P",
+        str(port),
+        "-r",
+        file_path,
+        "{}@{}:{}".format(user, ip, target),
+    ]
+    child = pexpect.spawn("scp", args=args, encoding="utf-8")
+    expect_and_send_password(child, password)
+    interact_with_child(child)
+
 
 def astute_ssh(ip, command=""):
-    ssh_to = str(ip)
-    try:
-        if int(ssh_to) >=1 and int(ssh_to) <=250:
-            ssh(USER, PASSWORD, "192.222.1.%s" % ssh_to, command=command)
-    except:
-        pass
-    try:    
-        if is_domain(ssh_to) or is_ipv4(ssh_to):
-            ssh(USER, PASSWORD, ssh_to, command=command)
-    except:
-        pass
+    ssh(USER, PASSWORD, resolve_host(ip), command=command)
 
-def astute_scp(ip, file, destination=None):
-    scp_to = str(ip)
-    try:
-        if int(scp_to) >=1 and int(scp_to) <=250:
-            scp(USER, PASSWORD, "192.222.1.%s" % scp_to, file, destination=destination)
-    except:
-        pass
-    try:    
-        if is_domain(scp_to) or is_ipv4(scp_to):
-            scp(USER, PASSWORD, scp_to, file, destination=destination)
-    except:
-        pass
 
-# main
-parameter = sys.argv[1:]
+def astute_scp(ip, file_path, destination=None):
+    scp(USER, PASSWORD, resolve_host(ip), file_path, destination=destination)
 
-if not parameter:
-    print HELP
 
-elif len(parameter) == 1:
-    astute_ssh(parameter[0])
+def run_scp(hosts, command):
+    if len(command) == 0 or len(command) > 2:
+        print(HELP, end="")
+        return 1
 
-elif '-s' in parameter and not '-c' in parameter:
-    flag_position = parameter.index('-s')
-    hosts = parameter[:flag_position]
-    command = parameter[(flag_position+1):]
-    if len(command) ==0 or len(command) > 2:
-        print HELP
-        sys.exit()
-    for h in hosts:
+    file_path = command[0]
+    if not os.path.exists(file_path):
+        print("Failed. No such file or directory: {}".format(file_path))
+        return 1
+
+    for host in hosts:
         if len(command) == 1:
-            print "\033[41;1m SCP %s to %s to the same place." % (command[0], "host-"+h) + "\033[0m"
             destination = None
-        else:            
-            destination = command[1]
-            # home dir need a special treat
-            if destination.lower() == os.environ['HOME'].lower():
-                destination = '~'
-            print "\033[41;1m SCP %s to %s to %s" % (command[0], "host-"+h, destination) + "\033[0m"
-        print "----------------------------"
+            print("\033[41;1m SCP {} to host-{} to the same place.\033[0m".format(file_path, host))
+        else:
+            destination = normalize_destination(file_path, command[1])
+            print("\033[41;1m SCP {} to host-{} to {}\033[0m".format(file_path, host, destination))
+        print("----------------------------")
         try:
-            astute_scp(h, command[0], destination=destination)
-        except:
-            print 'Faild. Maybe no such file or directory.'
-    sys.exit()
+            astute_scp(host, file_path, destination=destination)
+        except Exception as exc:
+            print("Failed: {}".format(exc))
+            return 1
+    return 0
 
-elif '-c' in parameter and not '-s' in parameter:
-    flag_position = parameter.index('-c')
-    hosts = parameter[:flag_position]
-    command = parameter[(flag_position+1):]
 
-    if len(command) ==0 or len(command) > 1:
-        print HELP
-        sys.exit()
-    for h in hosts:
-        print "\033[41;1m Run command %s in %s" % (command[0], "host-"+h) + "\033[0m"
-        print "----------------------------"
-        astute_ssh(h, command[0])
-    sys.exit()
+def run_command(hosts, command):
+    if len(command) != 1:
+        print(HELP, end="")
+        return 1
 
-else:
-    print HELP       
+    for host in hosts:
+        print("\033[41;1m Run command {} in host-{}\033[0m".format(command[0], host))
+        print("----------------------------")
+        try:
+            astute_ssh(host, command[0])
+        except Exception as exc:
+            print("Failed: {}".format(exc))
+            return 1
+    return 0
+
+
+def main(argv=None):
+    parameter = list(sys.argv[1:] if argv is None else argv)
+
+    if not parameter:
+        print(HELP, end="")
+        return 0
+
+    if len(parameter) == 1:
+        try:
+            astute_ssh(parameter[0])
+        except Exception as exc:
+            print("Failed: {}".format(exc))
+            return 1
+        return 0
+
+    if "-s" in parameter and "-c" not in parameter:
+        flag_position = parameter.index("-s")
+        return run_scp(parameter[:flag_position], parameter[(flag_position + 1) :])
+
+    if "-c" in parameter and "-s" not in parameter:
+        flag_position = parameter.index("-c")
+        return run_command(parameter[:flag_position], parameter[(flag_position + 1) :])
+
+    print(HELP, end="")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
