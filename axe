@@ -111,6 +111,18 @@ def wait_for_child(child):
         raise RuntimeError("Command terminated by signal {}.".format(child.signalstatus))
 
 
+def print_batch_summary(action, failures):
+    if not failures:
+        print("Completed {} on all hosts.".format(action))
+        return 0
+
+    hosts = ", ".join(item["host"] for item in failures)
+    print("Completed {} with failures on: {}".format(action, hosts))
+    for item in failures:
+        print("  {}: {}".format(item["host"], item["error"]))
+    return 1
+
+
 def interact_with_child(child):
     global CURRENT_CHILD
 
@@ -197,6 +209,7 @@ def run_scp(hosts, command):
         print("Failed. No such file or directory: {}".format(file_path))
         return 1
 
+    failures = []
     for host in hosts:
         if len(command) == 1:
             destination = None
@@ -209,8 +222,8 @@ def run_scp(hosts, command):
             astute_scp(host, file_path, destination=destination)
         except Exception as exc:
             print("Failed: {}".format(exc))
-            return 1
-    return 0
+            failures.append({"host": str(host), "error": str(exc)})
+    return print_batch_summary("SCP", failures)
 
 
 def run_command(hosts, command):
@@ -221,6 +234,7 @@ def run_command(hosts, command):
         print(HELP, end="")
         return 1
 
+    failures = []
     for host in hosts:
         print("\033[41;1m Run command {} in host-{}\033[0m".format(command[0], host))
         print("----------------------------")
@@ -228,8 +242,8 @@ def run_command(hosts, command):
             astute_ssh(host, command[0])
         except Exception as exc:
             print("Failed: {}".format(exc))
-            return 1
-    return 0
+            failures.append({"host": str(host), "error": str(exc)})
+    return print_batch_summary("command execution", failures)
 
 
 def main(argv=None):

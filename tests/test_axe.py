@@ -67,6 +67,40 @@ class AxeTests(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         mocked_print.assert_called_with("Failed. No host specified for SCP.")
 
+    def test_print_batch_summary_without_failures(self):
+        with mock.patch("builtins.print") as mocked_print:
+            exit_code = axe.print_batch_summary("command execution", [])
+        self.assertEqual(exit_code, 0)
+        mocked_print.assert_called_once_with("Completed command execution on all hosts.")
+
+    def test_print_batch_summary_with_failures(self):
+        failures = [{"host": "2", "error": "timeout"}, {"host": "4", "error": "auth failed"}]
+        with mock.patch("builtins.print") as mocked_print:
+            exit_code = axe.print_batch_summary("SCP", failures)
+        self.assertEqual(exit_code, 1)
+        mocked_print.assert_any_call("Completed SCP with failures on: 2, 4")
+        mocked_print.assert_any_call("  2: timeout")
+        mocked_print.assert_any_call("  4: auth failed")
+
+    def test_run_command_continues_after_host_failure(self):
+        with mock.patch.object(axe, "astute_ssh", side_effect=[RuntimeError("timeout"), None]) as ssh_mock, \
+             mock.patch("builtins.print") as mocked_print:
+            exit_code = axe.run_command(["2", "3"], ["hostname"])
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(ssh_mock.call_count, 2)
+        mocked_print.assert_any_call("Completed command execution with failures on: 2")
+
+    def test_run_scp_continues_after_host_failure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "demo.txt"
+            file_path.write_text("demo", encoding="utf-8")
+            with mock.patch.object(axe, "astute_scp", side_effect=[RuntimeError("timeout"), None]) as scp_mock, \
+                 mock.patch("builtins.print") as mocked_print:
+                exit_code = axe.run_scp(["2", "3"], [str(file_path)])
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(scp_mock.call_count, 2)
+        mocked_print.assert_any_call("Completed SCP with failures on: 2")
+
     def test_ssh_command_mode_waits_for_completion(self):
         child = mock.Mock()
         with mock.patch.object(axe.pexpect, "spawn", return_value=child) as spawn_mock, \
