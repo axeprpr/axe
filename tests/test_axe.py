@@ -41,6 +41,16 @@ class AxeTests(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         mocked_print.assert_called_with("Failed. No such file or directory: missing-file")
 
+    def test_getwinsize_falls_back_without_tty(self):
+        with mock.patch.object(axe.sys.stdout, "fileno", side_effect=OSError):
+            self.assertEqual(axe.getwinsize(), (24, 80))
+
+    def test_help_flag_prints_help(self):
+        with mock.patch("builtins.print") as mocked_print:
+            exit_code = axe.main(["--help"])
+        self.assertEqual(exit_code, 0)
+        mocked_print.assert_called_once_with(axe.HELP, end="")
+
     def test_main_rejects_command_without_hosts(self):
         with mock.patch("builtins.print") as mocked_print:
             exit_code = axe.main(["-c", "hostname"])

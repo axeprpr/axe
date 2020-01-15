@@ -43,7 +43,10 @@ def getwinsize():
     else:
         ioctl_code = 1074295912
     packed = struct.pack("HHHH", 0, 0, 0, 0)
-    data = fcntl.ioctl(sys.stdout.fileno(), ioctl_code, packed)
+    try:
+        data = fcntl.ioctl(sys.stdout.fileno(), ioctl_code, packed)
+    except (OSError, AttributeError):
+        return (24, 80)
     return struct.unpack("HHHH", data)[0:2]
 
 
@@ -232,7 +235,7 @@ def run_command(hosts, command):
 def main(argv=None):
     parameter = list(sys.argv[1:] if argv is None else argv)
 
-    if not parameter:
+    if not parameter or parameter == ["-h"] or parameter == ["--help"]:
         print(HELP, end="")
         return 0
 
