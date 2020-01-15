@@ -99,6 +99,15 @@ def expect_and_send_password(child, password):
     raise RuntimeError("Timed out waiting for password prompt.")
 
 
+def wait_for_child(child):
+    child.expect(pexpect.EOF)
+    child.close()
+    if child.exitstatus not in (0, None):
+        raise RuntimeError("Command exited with status {}.".format(child.exitstatus))
+    if child.signalstatus is not None:
+        raise RuntimeError("Command terminated by signal {}.".format(child.signalstatus))
+
+
 def interact_with_child(child):
     global CURRENT_CHILD
 
@@ -131,9 +140,18 @@ def ssh(user, password, ip, port=PORT, command=""):
     if command:
         args.append(command)
 
-    child = pexpect.spawn("ssh", args=args, env={"TERM": "xterm-256color"}, encoding="utf-8")
+    child = pexpect.spawn(
+        "ssh",
+        args=args,
+        env=dict(os.environ, TERM=os.environ.get("TERM", "xterm-256color")),
+        encoding="utf-8",
+    )
     expect_and_send_password(child, password)
-    interact_with_child(child)
+    if command:
+        child.logfile_read = sys.stdout
+        wait_for_child(child)
+    else:
+        interact_with_child(child)
 
 
 def scp(user, password, ip, file_path, port=PORT, destination=None):
@@ -149,9 +167,10 @@ def scp(user, password, ip, file_path, port=PORT, destination=None):
         file_path,
         "{}@{}:{}".format(user, ip, target),
     ]
-    child = pexpect.spawn("scp", args=args, encoding="utf-8")
+    child = pexpect.spawn("scp", args=args, env=dict(os.environ), encoding="utf-8")
     expect_and_send_password(child, password)
-    interact_with_child(child)
+    child.logfile_read = sys.stdout
+    wait_for_child(child)
 
 
 def astute_ssh(ip, command=""):
@@ -163,6 +182,9 @@ def astute_scp(ip, file_path, destination=None):
 
 
 def run_scp(hosts, command):
+    if not hosts:
+        print("Failed. No host specified for SCP.")
+        return 1
     if len(command) == 0 or len(command) > 2:
         print(HELP, end="")
         return 1
@@ -189,6 +211,9 @@ def run_scp(hosts, command):
 
 
 def run_command(hosts, command):
+    if not hosts:
+        print("Failed. No host specified for command execution.")
+        return 1
     if len(command) != 1:
         print(HELP, end="")
         return 1
