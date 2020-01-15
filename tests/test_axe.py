@@ -18,6 +18,10 @@ class AxeTests(unittest.TestCase):
     def test_resolve_host_accepts_short_number(self):
         self.assertEqual(axe.resolve_host("12"), "192.222.1.12")
 
+    def test_resolve_host_uses_configured_prefix(self):
+        with mock.patch.object(axe, "HOST_PREFIX", "10.20.30."):
+            self.assertEqual(axe.resolve_host("12"), "10.20.30.12")
+
     def test_resolve_host_accepts_ipv4(self):
         self.assertEqual(axe.resolve_host("10.0.0.8"), "10.0.0.8")
 

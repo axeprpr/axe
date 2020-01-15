@@ -15,6 +15,7 @@
 export AXE_USER=root
 export AXE_PASSWORD='donotuseroot!'
 export AXE_PORT=22
+export AXE_HOST_PREFIX='192.222.1.'
 ```
 
 如果不设置环境变量，脚本会使用内置默认值。
@@ -43,3 +44,4 @@ axe 2 3 4 -s './test'
 
 - `1` 到 `250` 会被解析为 `192.222.1.x`
 - 也支持直接传入 IPv4 地址或域名
+- 可以通过 `AXE_HOST_PREFIX` 切换短主机号的网段前缀

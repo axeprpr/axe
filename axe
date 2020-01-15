@@ -24,7 +24,7 @@ axe 2 3 4 -s './test' ==> scp file to host002/3/4 to the same place
 USER = os.environ.get("AXE_USER", "root")
 PASSWORD = os.environ.get("AXE_PASSWORD", "donotuseroot!")
 PORT = os.environ.get("AXE_PORT", "22")
-HOST_PREFIX = "192.222.1."
+HOST_PREFIX = os.environ.get("AXE_HOST_PREFIX", "192.222.1.")
 CURRENT_CHILD = None
 
 
