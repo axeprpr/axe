@@ -22,6 +22,14 @@ class AxeTests(unittest.TestCase):
         with mock.patch.object(axe, "HOST_PREFIX", "10.20.30."):
             self.assertEqual(axe.resolve_host("12"), "10.20.30.12")
 
+    def test_connect_timeout_comes_from_environment_on_reload(self):
+        with mock.patch.dict(os.environ, {"AXE_CONNECT_TIMEOUT": "21"}, clear=False):
+            loader = importlib.machinery.SourceFileLoader("axe_module_timeout", str(AXE_PATH))
+            spec = importlib.util.spec_from_loader(loader.name, loader)
+            reloaded = importlib.util.module_from_spec(spec)
+            loader.exec_module(reloaded)
+        self.assertEqual(reloaded.CONNECT_TIMEOUT, 21)
+
     def test_resolve_host_accepts_ipv4(self):
         self.assertEqual(axe.resolve_host("10.0.0.8"), "10.0.0.8")
 
@@ -126,6 +134,14 @@ class AxeTests(unittest.TestCase):
         expect_mock.assert_called_once_with(child, "secret")
         wait_mock.assert_called_once_with(child)
         self.assertIs(child.logfile_read, axe.sys.stdout)
+
+    def test_expect_and_send_password_uses_configured_timeout(self):
+        child = mock.Mock()
+        child.expect.return_value = 0
+        with mock.patch.object(axe, "CONNECT_TIMEOUT", 27):
+            axe.expect_and_send_password(child, "secret")
+        child.expect.assert_called_once_with([r"[Pp]assword:", axe.pexpect.EOF, axe.pexpect.TIMEOUT], timeout=27)
+        child.sendline.assert_called_once_with("secret")
 
 
 if __name__ == "__main__":

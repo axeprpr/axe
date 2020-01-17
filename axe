@@ -25,6 +25,7 @@ USER = os.environ.get("AXE_USER", "root")
 PASSWORD = os.environ.get("AXE_PASSWORD", "donotuseroot!")
 PORT = os.environ.get("AXE_PORT", "22")
 HOST_PREFIX = os.environ.get("AXE_HOST_PREFIX", "192.222.1.")
+CONNECT_TIMEOUT = int(os.environ.get("AXE_CONNECT_TIMEOUT", "15"))
 CURRENT_CHILD = None
 
 
@@ -93,7 +94,7 @@ def normalize_destination(file_path, destination):
 
 
 def expect_and_send_password(child, password):
-    match_index = child.expect([r"[Pp]assword:", pexpect.EOF, pexpect.TIMEOUT], timeout=15)
+    match_index = child.expect([r"[Pp]assword:", pexpect.EOF, pexpect.TIMEOUT], timeout=CONNECT_TIMEOUT)
     if match_index == 0:
         child.sendline(password)
         return
