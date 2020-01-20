@@ -94,17 +94,36 @@ def normalize_destination(file_path, destination):
 
 
 def expect_and_send_password(child, password):
-    match_index = child.expect([r"[Pp]assword:", pexpect.EOF, pexpect.TIMEOUT], timeout=CONNECT_TIMEOUT)
+    match_index = child.expect(
+        [r"[Pp]assword:", r"Permission denied", r"Connection refused", r"No route to host", pexpect.EOF, pexpect.TIMEOUT],
+        timeout=CONNECT_TIMEOUT,
+    )
     if match_index == 0:
         child.sendline(password)
         return
     if match_index == 1:
+        raise RuntimeError("Authentication failed.")
+    if match_index == 2:
+        raise RuntimeError("Connection refused.")
+    if match_index == 3:
+        raise RuntimeError("No route to host.")
+    if match_index == 4:
         return
     raise RuntimeError("Timed out waiting for password prompt.")
 
 
 def wait_for_child(child):
-    child.expect(pexpect.EOF)
+    match_index = child.expect([r"Permission denied", r"Connection closed by remote host", pexpect.EOF, pexpect.TIMEOUT])
+    if match_index == 0:
+        child.close()
+        raise RuntimeError("Authentication failed.")
+    if match_index == 1:
+        child.close()
+        raise RuntimeError("Connection closed by remote host.")
+    if match_index == 3:
+        child.close()
+        raise RuntimeError("Timed out waiting for remote command to finish.")
+
     child.close()
     if child.exitstatus not in (0, None):
         raise RuntimeError("Command exited with status {}.".format(child.exitstatus))

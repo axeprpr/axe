@@ -140,8 +140,37 @@ class AxeTests(unittest.TestCase):
         child.expect.return_value = 0
         with mock.patch.object(axe, "CONNECT_TIMEOUT", 27):
             axe.expect_and_send_password(child, "secret")
-        child.expect.assert_called_once_with([r"[Pp]assword:", axe.pexpect.EOF, axe.pexpect.TIMEOUT], timeout=27)
+        child.expect.assert_called_once_with(
+            [r"[Pp]assword:", r"Permission denied", r"Connection refused", r"No route to host", axe.pexpect.EOF, axe.pexpect.TIMEOUT],
+            timeout=27,
+        )
         child.sendline.assert_called_once_with("secret")
+
+    def test_expect_and_send_password_classifies_auth_failure(self):
+        child = mock.Mock()
+        child.expect.return_value = 1
+        with self.assertRaisesRegex(RuntimeError, "Authentication failed"):
+            axe.expect_and_send_password(child, "secret")
+
+    def test_expect_and_send_password_classifies_connection_refused(self):
+        child = mock.Mock()
+        child.expect.return_value = 2
+        with self.assertRaisesRegex(RuntimeError, "Connection refused"):
+            axe.expect_and_send_password(child, "secret")
+
+    def test_wait_for_child_classifies_remote_close(self):
+        child = mock.Mock()
+        child.expect.return_value = 1
+        with self.assertRaisesRegex(RuntimeError, "Connection closed by remote host"):
+            axe.wait_for_child(child)
+        child.close.assert_called_once()
+
+    def test_wait_for_child_classifies_timeout(self):
+        child = mock.Mock()
+        child.expect.return_value = 3
+        with self.assertRaisesRegex(RuntimeError, "Timed out waiting for remote command to finish"):
+            axe.wait_for_child(child)
+        child.close.assert_called_once()
 
 
 if __name__ == "__main__":
