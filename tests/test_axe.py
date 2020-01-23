@@ -77,16 +77,18 @@ class AxeTests(unittest.TestCase):
 
     def test_print_batch_summary_without_failures(self):
         with mock.patch("builtins.print") as mocked_print:
-            exit_code = axe.print_batch_summary("command execution", [])
+            exit_code = axe.print_batch_summary("command execution", ["2", "3"], [])
         self.assertEqual(exit_code, 0)
-        mocked_print.assert_called_once_with("Completed command execution on all hosts.")
+        mocked_print.assert_any_call("Completed command execution on all hosts.")
+        mocked_print.assert_any_call("Summary: total=2, succeeded=2, failed=0")
 
     def test_print_batch_summary_with_failures(self):
         failures = [{"host": "2", "error": "timeout"}, {"host": "4", "error": "auth failed"}]
         with mock.patch("builtins.print") as mocked_print:
-            exit_code = axe.print_batch_summary("SCP", failures)
+            exit_code = axe.print_batch_summary("SCP", ["2", "3", "4"], failures)
         self.assertEqual(exit_code, 1)
         mocked_print.assert_any_call("Completed SCP with failures on: 2, 4")
+        mocked_print.assert_any_call("Summary: total=3, succeeded=1, failed=2")
         mocked_print.assert_any_call("  2: timeout")
         mocked_print.assert_any_call("  4: auth failed")
 

@@ -131,13 +131,19 @@ def wait_for_child(child):
         raise RuntimeError("Command terminated by signal {}.".format(child.signalstatus))
 
 
-def print_batch_summary(action, failures):
+def print_batch_summary(action, hosts, failures):
+    total = len(hosts)
+    failed = len(failures)
+    succeeded = total - failed
+
     if not failures:
         print("Completed {} on all hosts.".format(action))
+        print("Summary: total={}, succeeded={}, failed=0".format(total, succeeded))
         return 0
 
     hosts = ", ".join(item["host"] for item in failures)
     print("Completed {} with failures on: {}".format(action, hosts))
+    print("Summary: total={}, succeeded={}, failed={}".format(total, succeeded, failed))
     for item in failures:
         print("  {}: {}".format(item["host"], item["error"]))
     return 1
@@ -243,7 +249,7 @@ def run_scp(hosts, command):
         except Exception as exc:
             print("Failed: {}".format(exc))
             failures.append({"host": str(host), "error": str(exc)})
-    return print_batch_summary("SCP", failures)
+    return print_batch_summary("SCP", hosts, failures)
 
 
 def run_command(hosts, command):
@@ -263,7 +269,7 @@ def run_command(hosts, command):
         except Exception as exc:
             print("Failed: {}".format(exc))
             failures.append({"host": str(host), "error": str(exc)})
-    return print_batch_summary("command execution", failures)
+    return print_batch_summary("command execution", hosts, failures)
 
 
 def main(argv=None):
