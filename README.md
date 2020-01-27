@@ -17,6 +17,7 @@ export AXE_PASSWORD='donotuseroot!'
 export AXE_PORT=22
 export AXE_HOST_PREFIX='192.222.1.'
 export AXE_CONNECT_TIMEOUT=15
+export AXE_IDENTITY_FILE='~/.ssh/id_rsa'
 ```
 
 如果不设置环境变量，脚本会使用内置默认值。
@@ -40,6 +41,7 @@ axe 2 3 4 -c 'ls -lrt'
 axe 2 3 4 -s './test' '/home/astute'
 axe 2 3 4 -s './test'
 axe --user admin --port 2222 --host-prefix '10.20.30.' --timeout 10 12 -c 'hostname'
+axe --identity '~/.ssh/id_rsa' 12
 ```
 
 其中：
@@ -48,4 +50,5 @@ axe --user admin --port 2222 --host-prefix '10.20.30.' --timeout 10 12 -c 'hostn
 - 也支持直接传入 IPv4 地址或域名
 - 可以通过 `AXE_HOST_PREFIX` 切换短主机号的网段前缀
 - 可以通过 `AXE_CONNECT_TIMEOUT` 调整等待密码提示和连接建立的超时时间
-- 也可以通过 `--user`、`--password`、`--port`、`--host-prefix`、`--timeout` 仅对当前一次执行做覆盖
+- 可以通过 `AXE_IDENTITY_FILE` 配置私钥登录
+- 也可以通过 `--user`、`--password`、`--port`、`--host-prefix`、`--timeout`、`--identity` 仅对当前一次执行做覆盖

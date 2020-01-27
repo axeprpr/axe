@@ -26,6 +26,7 @@ PASSWORD = os.environ.get("AXE_PASSWORD", "donotuseroot!")
 PORT = os.environ.get("AXE_PORT", "22")
 HOST_PREFIX = os.environ.get("AXE_HOST_PREFIX", "192.222.1.")
 CONNECT_TIMEOUT = int(os.environ.get("AXE_CONNECT_TIMEOUT", "15"))
+IDENTITY_FILE = os.environ.get("AXE_IDENTITY_FILE")
 CURRENT_CHILD = None
 
 
@@ -100,6 +101,7 @@ def parse_options(argv):
         "port": PORT,
         "host_prefix": HOST_PREFIX,
         "connect_timeout": CONNECT_TIMEOUT,
+        "identity_file": IDENTITY_FILE,
     }
     remaining = []
     index = 0
@@ -143,6 +145,12 @@ def parse_options(argv):
             options["connect_timeout"] = int(argv[index + 1])
             index += 2
             continue
+        if token == "--identity":
+            if index + 1 >= len(argv):
+                raise ValueError("Missing value for --identity.")
+            options["identity_file"] = argv[index + 1]
+            index += 2
+            continue
         remaining.append(token)
         index += 1
 
@@ -150,13 +158,14 @@ def parse_options(argv):
 
 
 def apply_runtime_options(options):
-    global USER, PASSWORD, PORT, HOST_PREFIX, CONNECT_TIMEOUT
+    global USER, PASSWORD, PORT, HOST_PREFIX, CONNECT_TIMEOUT, IDENTITY_FILE
 
     USER = options["user"]
     PASSWORD = options["password"]
     PORT = str(options["port"])
     HOST_PREFIX = options["host_prefix"]
     CONNECT_TIMEOUT = int(options["connect_timeout"])
+    IDENTITY_FILE = options["identity_file"]
 
 
 def expect_and_send_password(child, password):
@@ -234,7 +243,7 @@ def interact_with_child(child):
             signal.signal(signal.SIGWINCH, old_handler)
 
 
-def ssh(user, password, ip, port=PORT, command=""):
+def ssh(user, password, ip, port=PORT, command="", identity_file=None):
     args = [
         "-o",
         "UserKnownHostsFile=/dev/null",
@@ -242,8 +251,10 @@ def ssh(user, password, ip, port=PORT, command=""):
         "StrictHostKeyChecking=no",
         "-p",
         str(port),
-        "{}@{}".format(user, ip),
     ]
+    if identity_file:
+        args.extend(["-i", os.path.expanduser(identity_file)])
+    args.append("{}@{}".format(user, ip))
     if command:
         args.append(command)
 
@@ -261,7 +272,7 @@ def ssh(user, password, ip, port=PORT, command=""):
         interact_with_child(child)
 
 
-def scp(user, password, ip, file_path, port=PORT, destination=None):
+def scp(user, password, ip, file_path, port=PORT, destination=None, identity_file=None):
     target = normalize_destination(file_path, destination)
     args = [
         "-o",
@@ -270,10 +281,14 @@ def scp(user, password, ip, file_path, port=PORT, destination=None):
         "StrictHostKeyChecking=no",
         "-P",
         str(port),
+    ]
+    if identity_file:
+        args.extend(["-i", os.path.expanduser(identity_file)])
+    args.extend([
         "-r",
         file_path,
         "{}@{}:{}".format(user, ip, target),
-    ]
+    ])
     child = pexpect.spawn("scp", args=args, env=dict(os.environ), encoding="utf-8")
     expect_and_send_password(child, password)
     child.logfile_read = sys.stdout
@@ -281,11 +296,11 @@ def scp(user, password, ip, file_path, port=PORT, destination=None):
 
 
 def astute_ssh(ip, command=""):
-    ssh(USER, PASSWORD, resolve_host(ip), command=command)
+    ssh(USER, PASSWORD, resolve_host(ip), command=command, identity_file=IDENTITY_FILE)
 
 
 def astute_scp(ip, file_path, destination=None):
-    scp(USER, PASSWORD, resolve_host(ip), file_path, destination=destination)
+    scp(USER, PASSWORD, resolve_host(ip), file_path, destination=destination, identity_file=IDENTITY_FILE)
 
 
 def run_scp(hosts, command):

@@ -31,11 +31,14 @@ class AxeTests(unittest.TestCase):
         self.assertEqual(reloaded.CONNECT_TIMEOUT, 21)
 
     def test_parse_options_supports_cli_overrides(self):
-        options, remaining = axe.parse_options(["--user", "admin", "--port", "2222", "--host-prefix", "10.0.0.", "--timeout", "9", "12"])
+        options, remaining = axe.parse_options(
+            ["--user", "admin", "--port", "2222", "--host-prefix", "10.0.0.", "--timeout", "9", "--identity", "~/.ssh/id_rsa", "12"]
+        )
         self.assertEqual(options["user"], "admin")
         self.assertEqual(options["port"], "2222")
         self.assertEqual(options["host_prefix"], "10.0.0.")
         self.assertEqual(options["connect_timeout"], 9)
+        self.assertEqual(options["identity_file"], "~/.ssh/id_rsa")
         self.assertEqual(remaining, ["12"])
 
     def test_parse_options_requires_values(self):
@@ -43,18 +46,26 @@ class AxeTests(unittest.TestCase):
             axe.parse_options(["--port"])
 
     def test_apply_runtime_options_updates_globals(self):
-        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT)
+        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE)
         try:
             axe.apply_runtime_options(
-                {"user": "admin", "password": "pw", "port": "2222", "host_prefix": "10.0.0.", "connect_timeout": 8}
+                {
+                    "user": "admin",
+                    "password": "pw",
+                    "port": "2222",
+                    "host_prefix": "10.0.0.",
+                    "connect_timeout": 8,
+                    "identity_file": "~/.ssh/id_rsa",
+                }
             )
             self.assertEqual(axe.USER, "admin")
             self.assertEqual(axe.PASSWORD, "pw")
             self.assertEqual(axe.PORT, "2222")
             self.assertEqual(axe.HOST_PREFIX, "10.0.0.")
             self.assertEqual(axe.CONNECT_TIMEOUT, 8)
+            self.assertEqual(axe.IDENTITY_FILE, "~/.ssh/id_rsa")
         finally:
-            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT = original
+            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE = original
 
     def test_resolve_host_accepts_ipv4(self):
         self.assertEqual(axe.resolve_host("10.0.0.8"), "10.0.0.8")
@@ -90,18 +101,21 @@ class AxeTests(unittest.TestCase):
         mocked_print.assert_called_once_with(axe.HELP, end="")
 
     def test_main_applies_cli_overrides_before_running(self):
-        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT)
+        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE)
         try:
             with mock.patch.object(axe, "astute_ssh") as ssh_mock:
-                exit_code = axe.main(["--user", "admin", "--port", "2222", "--host-prefix", "10.0.0.", "--timeout", "8", "12"])
+                exit_code = axe.main(
+                    ["--user", "admin", "--port", "2222", "--host-prefix", "10.0.0.", "--timeout", "8", "--identity", "~/.ssh/id_rsa", "12"]
+                )
             self.assertEqual(exit_code, 0)
             ssh_mock.assert_called_once_with("12")
             self.assertEqual(axe.USER, "admin")
             self.assertEqual(axe.PORT, "2222")
             self.assertEqual(axe.HOST_PREFIX, "10.0.0.")
             self.assertEqual(axe.CONNECT_TIMEOUT, 8)
+            self.assertEqual(axe.IDENTITY_FILE, "~/.ssh/id_rsa")
         finally:
-            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT = original
+            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE = original
 
     def test_main_reports_missing_option_value(self):
         with mock.patch("builtins.print") as mocked_print:
@@ -182,6 +196,15 @@ class AxeTests(unittest.TestCase):
         expect_mock.assert_called_once_with(child, "secret")
         wait_mock.assert_called_once_with(child)
         self.assertIs(child.logfile_read, axe.sys.stdout)
+
+    def test_ssh_includes_identity_file_when_configured(self):
+        child = mock.Mock()
+        with mock.patch.object(axe.pexpect, "spawn", return_value=child) as spawn_mock, \
+             mock.patch.object(axe, "expect_and_send_password"), \
+             mock.patch.object(axe, "wait_for_child"):
+            axe.ssh("root", "secret", "10.0.0.8", command="hostname", identity_file="~/.ssh/id_rsa")
+        self.assertIn("-i", spawn_mock.call_args.kwargs["args"])
+        self.assertIn(os.path.expanduser("~/.ssh/id_rsa"), spawn_mock.call_args.kwargs["args"])
 
     def test_expect_and_send_password_uses_configured_timeout(self):
         child = mock.Mock()
