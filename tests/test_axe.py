@@ -38,6 +38,10 @@ class AxeTests(unittest.TestCase):
         self.assertEqual(options["connect_timeout"], 9)
         self.assertEqual(remaining, ["12"])
 
+    def test_parse_options_requires_values(self):
+        with self.assertRaisesRegex(ValueError, "Missing value for --port"):
+            axe.parse_options(["--port"])
+
     def test_apply_runtime_options_updates_globals(self):
         original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT)
         try:
@@ -98,6 +102,12 @@ class AxeTests(unittest.TestCase):
             self.assertEqual(axe.CONNECT_TIMEOUT, 8)
         finally:
             axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT = original
+
+    def test_main_reports_missing_option_value(self):
+        with mock.patch("builtins.print") as mocked_print:
+            exit_code = axe.main(["--timeout"])
+        self.assertEqual(exit_code, 1)
+        mocked_print.assert_called_once_with("Failed: Missing value for --timeout.")
 
     def test_main_rejects_command_without_hosts(self):
         with mock.patch("builtins.print") as mocked_print:

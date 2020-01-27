@@ -114,22 +114,32 @@ def parse_options(argv):
             remaining.extend(argv[index:])
             break
         if token == "--user":
+            if index + 1 >= len(argv):
+                raise ValueError("Missing value for --user.")
             options["user"] = argv[index + 1]
             index += 2
             continue
         if token == "--password":
+            if index + 1 >= len(argv):
+                raise ValueError("Missing value for --password.")
             options["password"] = argv[index + 1]
             index += 2
             continue
         if token == "--port":
+            if index + 1 >= len(argv):
+                raise ValueError("Missing value for --port.")
             options["port"] = argv[index + 1]
             index += 2
             continue
         if token == "--host-prefix":
+            if index + 1 >= len(argv):
+                raise ValueError("Missing value for --host-prefix.")
             options["host_prefix"] = argv[index + 1]
             index += 2
             continue
         if token == "--timeout":
+            if index + 1 >= len(argv):
+                raise ValueError("Missing value for --timeout.")
             options["connect_timeout"] = int(argv[index + 1])
             index += 2
             continue
@@ -330,8 +340,12 @@ def run_command(hosts, command):
 
 def main(argv=None):
     parameter = list(sys.argv[1:] if argv is None else argv)
-    options, parameter = parse_options(parameter)
-    apply_runtime_options(options)
+    try:
+        options, parameter = parse_options(parameter)
+        apply_runtime_options(options)
+    except ValueError as exc:
+        print("Failed: {}".format(exc))
+        return 1
 
     if not parameter or parameter == ["-h"] or parameter == ["--help"]:
         print(HELP, end="")
