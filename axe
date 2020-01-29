@@ -27,6 +27,7 @@ PORT = os.environ.get("AXE_PORT", "22")
 HOST_PREFIX = os.environ.get("AXE_HOST_PREFIX", "192.222.1.")
 CONNECT_TIMEOUT = int(os.environ.get("AXE_CONNECT_TIMEOUT", "15"))
 IDENTITY_FILE = os.environ.get("AXE_IDENTITY_FILE")
+DRY_RUN = False
 CURRENT_CHILD = None
 
 
@@ -102,6 +103,7 @@ def parse_options(argv):
         "host_prefix": HOST_PREFIX,
         "connect_timeout": CONNECT_TIMEOUT,
         "identity_file": IDENTITY_FILE,
+        "dry_run": DRY_RUN,
     }
     remaining = []
     index = 0
@@ -110,6 +112,10 @@ def parse_options(argv):
         token = argv[index]
         if token in ("-h", "--help"):
             remaining.append(token)
+            index += 1
+            continue
+        if token == "--dry-run":
+            options["dry_run"] = True
             index += 1
             continue
         if token in ("-c", "-s"):
@@ -158,7 +164,7 @@ def parse_options(argv):
 
 
 def apply_runtime_options(options):
-    global USER, PASSWORD, PORT, HOST_PREFIX, CONNECT_TIMEOUT, IDENTITY_FILE
+    global USER, PASSWORD, PORT, HOST_PREFIX, CONNECT_TIMEOUT, IDENTITY_FILE, DRY_RUN
 
     USER = options["user"]
     PASSWORD = options["password"]
@@ -166,6 +172,7 @@ def apply_runtime_options(options):
     HOST_PREFIX = options["host_prefix"]
     CONNECT_TIMEOUT = int(options["connect_timeout"])
     IDENTITY_FILE = options["identity_file"]
+    DRY_RUN = bool(options["dry_run"])
 
 
 def expect_and_send_password(child, password):
@@ -296,10 +303,18 @@ def scp(user, password, ip, file_path, port=PORT, destination=None, identity_fil
 
 
 def astute_ssh(ip, command=""):
+    if DRY_RUN:
+        target = resolve_host(ip)
+        print("DRY RUN ssh {}@{} port={} command={!r}".format(USER, target, PORT, command))
+        return
     ssh(USER, PASSWORD, resolve_host(ip), command=command, identity_file=IDENTITY_FILE)
 
 
 def astute_scp(ip, file_path, destination=None):
+    if DRY_RUN:
+        target = resolve_host(ip)
+        print("DRY RUN scp {} -> {}@{}:{} port={}".format(file_path, USER, target, normalize_destination(file_path, destination), PORT))
+        return
     scp(USER, PASSWORD, resolve_host(ip), file_path, destination=destination, identity_file=IDENTITY_FILE)
 
 

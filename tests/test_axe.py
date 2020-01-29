@@ -32,13 +32,14 @@ class AxeTests(unittest.TestCase):
 
     def test_parse_options_supports_cli_overrides(self):
         options, remaining = axe.parse_options(
-            ["--user", "admin", "--port", "2222", "--host-prefix", "10.0.0.", "--timeout", "9", "--identity", "~/.ssh/id_rsa", "12"]
+            ["--user", "admin", "--port", "2222", "--host-prefix", "10.0.0.", "--timeout", "9", "--identity", "~/.ssh/id_rsa", "--dry-run", "12"]
         )
         self.assertEqual(options["user"], "admin")
         self.assertEqual(options["port"], "2222")
         self.assertEqual(options["host_prefix"], "10.0.0.")
         self.assertEqual(options["connect_timeout"], 9)
         self.assertEqual(options["identity_file"], "~/.ssh/id_rsa")
+        self.assertTrue(options["dry_run"])
         self.assertEqual(remaining, ["12"])
 
     def test_parse_options_requires_values(self):
@@ -46,7 +47,7 @@ class AxeTests(unittest.TestCase):
             axe.parse_options(["--port"])
 
     def test_apply_runtime_options_updates_globals(self):
-        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE)
+        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN)
         try:
             axe.apply_runtime_options(
                 {
@@ -56,6 +57,7 @@ class AxeTests(unittest.TestCase):
                     "host_prefix": "10.0.0.",
                     "connect_timeout": 8,
                     "identity_file": "~/.ssh/id_rsa",
+                    "dry_run": True,
                 }
             )
             self.assertEqual(axe.USER, "admin")
@@ -64,8 +66,9 @@ class AxeTests(unittest.TestCase):
             self.assertEqual(axe.HOST_PREFIX, "10.0.0.")
             self.assertEqual(axe.CONNECT_TIMEOUT, 8)
             self.assertEqual(axe.IDENTITY_FILE, "~/.ssh/id_rsa")
+            self.assertTrue(axe.DRY_RUN)
         finally:
-            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE = original
+            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN = original
 
     def test_resolve_host_accepts_ipv4(self):
         self.assertEqual(axe.resolve_host("10.0.0.8"), "10.0.0.8")
@@ -101,11 +104,11 @@ class AxeTests(unittest.TestCase):
         mocked_print.assert_called_once_with(axe.HELP, end="")
 
     def test_main_applies_cli_overrides_before_running(self):
-        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE)
+        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN)
         try:
             with mock.patch.object(axe, "astute_ssh") as ssh_mock:
                 exit_code = axe.main(
-                    ["--user", "admin", "--port", "2222", "--host-prefix", "10.0.0.", "--timeout", "8", "--identity", "~/.ssh/id_rsa", "12"]
+                    ["--user", "admin", "--port", "2222", "--host-prefix", "10.0.0.", "--timeout", "8", "--identity", "~/.ssh/id_rsa", "--dry-run", "12"]
                 )
             self.assertEqual(exit_code, 0)
             ssh_mock.assert_called_once_with("12")
@@ -114,8 +117,9 @@ class AxeTests(unittest.TestCase):
             self.assertEqual(axe.HOST_PREFIX, "10.0.0.")
             self.assertEqual(axe.CONNECT_TIMEOUT, 8)
             self.assertEqual(axe.IDENTITY_FILE, "~/.ssh/id_rsa")
+            self.assertTrue(axe.DRY_RUN)
         finally:
-            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE = original
+            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN = original
 
     def test_main_reports_missing_option_value(self):
         with mock.patch("builtins.print") as mocked_print:
@@ -242,6 +246,30 @@ class AxeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Timed out waiting for remote command to finish"):
             axe.wait_for_child(child)
         child.close.assert_called_once()
+
+    def test_astute_ssh_dry_run_prints_command(self):
+        original = axe.DRY_RUN
+        try:
+            axe.DRY_RUN = True
+            with mock.patch("builtins.print") as mocked_print:
+                axe.astute_ssh("12", "hostname")
+            mocked_print.assert_called_once_with("DRY RUN ssh {}@{} port={} command={!r}".format(axe.USER, "192.222.1.12", axe.PORT, "hostname"))
+        finally:
+            axe.DRY_RUN = original
+
+    def test_astute_scp_dry_run_prints_transfer(self):
+        original = axe.DRY_RUN
+        try:
+            axe.DRY_RUN = True
+            with tempfile.TemporaryDirectory() as temp_dir:
+                file_path = Path(temp_dir) / "demo.txt"
+                file_path.write_text("demo", encoding="utf-8")
+                with mock.patch("builtins.print") as mocked_print:
+                    axe.astute_scp("12", str(file_path))
+            mocked_print.assert_called_once()
+            self.assertIn("DRY RUN scp", mocked_print.call_args.args[0])
+        finally:
+            axe.DRY_RUN = original
 
 
 if __name__ == "__main__":
