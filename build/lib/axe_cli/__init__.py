@@ -1,0 +1,2 @@
+"""axe CLI package."""
+

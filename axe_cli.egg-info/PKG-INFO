@@ -1,3 +1,10 @@
+Metadata-Version: 2.4
+Name: axe-cli
+Version: 0.1.0
+Summary: Batch SSH and SCP helper built on pexpect
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+
 # axe
 
 基于 `pexpect` 的批量 SSH/SCP 小工具，适用于多台服务器共用同一组用户名、密码和端口的场景。

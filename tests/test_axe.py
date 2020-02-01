@@ -1,17 +1,10 @@
-import importlib.machinery
-import importlib.util
 import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-
-AXE_PATH = Path(__file__).resolve().parents[1] / "axe"
-LOADER = importlib.machinery.SourceFileLoader("axe_module", str(AXE_PATH))
-SPEC = importlib.util.spec_from_loader(LOADER.name, LOADER)
-axe = importlib.util.module_from_spec(SPEC)
-LOADER.exec_module(axe)
+from axe_cli import cli as axe
 
 
 class AxeTests(unittest.TestCase):
@@ -24,10 +17,9 @@ class AxeTests(unittest.TestCase):
 
     def test_connect_timeout_comes_from_environment_on_reload(self):
         with mock.patch.dict(os.environ, {"AXE_CONNECT_TIMEOUT": "21"}, clear=False):
-            loader = importlib.machinery.SourceFileLoader("axe_module_timeout", str(AXE_PATH))
-            spec = importlib.util.spec_from_loader(loader.name, loader)
-            reloaded = importlib.util.module_from_spec(spec)
-            loader.exec_module(reloaded)
+            import importlib
+
+            reloaded = importlib.reload(axe)
         self.assertEqual(reloaded.CONNECT_TIMEOUT, 21)
 
     def test_parse_options_supports_cli_overrides(self):
