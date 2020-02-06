@@ -50,6 +50,7 @@ axe 2 3 4 -s './test'
 axe --user admin --port 2222 --host-prefix '10.20.30.' --timeout 10 12 -c 'hostname'
 axe --identity '~/.ssh/id_rsa' 12
 axe --dry-run 2 3 4 -c 'uptime'
+axe --jobs 4 2 3 4 -c 'uptime'
 ```
 
 其中：
@@ -60,4 +61,5 @@ axe --dry-run 2 3 4 -c 'uptime'
 - 可以通过 `AXE_CONNECT_TIMEOUT` 调整等待密码提示和连接建立的超时时间
 - 可以通过 `AXE_IDENTITY_FILE` 配置私钥登录
 - 可以通过 `--dry-run` 先预览将要执行的 SSH/SCP 目标和参数
-- 也可以通过 `--user`、`--password`、`--port`、`--host-prefix`、`--timeout`、`--identity`、`--dry-run` 仅对当前一次执行做覆盖
+- 可以通过 `--jobs N` 控制批量命令和批量拷贝的并发数
+- 也可以通过 `--user`、`--password`、`--port`、`--host-prefix`、`--timeout`、`--identity`、`--dry-run`、`--jobs` 仅对当前一次执行做覆盖

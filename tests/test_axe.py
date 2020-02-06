@@ -23,34 +23,32 @@ class AxeTests(unittest.TestCase):
         self.assertEqual(reloaded.CONNECT_TIMEOUT, 21)
 
     def test_parse_options_supports_cli_overrides(self):
-        options, remaining = axe.parse_options(
+        options = axe.parse_options(
             ["--user", "admin", "--port", "2222", "--host-prefix", "10.0.0.", "--timeout", "9", "--identity", "~/.ssh/id_rsa", "--dry-run", "12"]
         )
-        self.assertEqual(options["user"], "admin")
-        self.assertEqual(options["port"], "2222")
-        self.assertEqual(options["host_prefix"], "10.0.0.")
-        self.assertEqual(options["connect_timeout"], 9)
-        self.assertEqual(options["identity_file"], "~/.ssh/id_rsa")
-        self.assertTrue(options["dry_run"])
-        self.assertEqual(remaining, ["12"])
+        self.assertEqual(options.user, "admin")
+        self.assertEqual(options.port, "2222")
+        self.assertEqual(options.host_prefix, "10.0.0.")
+        self.assertEqual(options.connect_timeout, 9)
+        self.assertEqual(options.identity_file, "~/.ssh/id_rsa")
+        self.assertTrue(options.dry_run)
+        self.assertEqual(options.hosts, ["12"])
 
     def test_parse_options_requires_values(self):
-        with self.assertRaisesRegex(ValueError, "Missing value for --port"):
+        with self.assertRaisesRegex(axe.ArgumentParserError, "expected one argument"):
             axe.parse_options(["--port"])
 
+    def test_parse_options_supports_jobs(self):
+        options = axe.parse_options(["--jobs", "3", "2", "3", "-c", "hostname"])
+        self.assertEqual(options.jobs, 3)
+        self.assertEqual(options.hosts, ["2", "3"])
+        self.assertEqual(options.command, "hostname")
+
     def test_apply_runtime_options_updates_globals(self):
-        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN)
+        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN, axe.JOBS)
         try:
             axe.apply_runtime_options(
-                {
-                    "user": "admin",
-                    "password": "pw",
-                    "port": "2222",
-                    "host_prefix": "10.0.0.",
-                    "connect_timeout": 8,
-                    "identity_file": "~/.ssh/id_rsa",
-                    "dry_run": True,
-                }
+                axe.parse_options(["--user", "admin", "--password", "pw", "--port", "2222", "--host-prefix", "10.0.0.", "--timeout", "8", "--identity", "~/.ssh/id_rsa", "--dry-run", "--jobs", "4"])
             )
             self.assertEqual(axe.USER, "admin")
             self.assertEqual(axe.PASSWORD, "pw")
@@ -59,8 +57,9 @@ class AxeTests(unittest.TestCase):
             self.assertEqual(axe.CONNECT_TIMEOUT, 8)
             self.assertEqual(axe.IDENTITY_FILE, "~/.ssh/id_rsa")
             self.assertTrue(axe.DRY_RUN)
+            self.assertEqual(axe.JOBS, 4)
         finally:
-            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN = original
+            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN, axe.JOBS = original
 
     def test_resolve_host_accepts_ipv4(self):
         self.assertEqual(axe.resolve_host("10.0.0.8"), "10.0.0.8")
@@ -96,7 +95,7 @@ class AxeTests(unittest.TestCase):
         mocked_print.assert_called_once_with(axe.HELP, end="")
 
     def test_main_applies_cli_overrides_before_running(self):
-        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN)
+        original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN, axe.JOBS)
         try:
             with mock.patch.object(axe, "astute_ssh") as ssh_mock:
                 exit_code = axe.main(
@@ -110,14 +109,21 @@ class AxeTests(unittest.TestCase):
             self.assertEqual(axe.CONNECT_TIMEOUT, 8)
             self.assertEqual(axe.IDENTITY_FILE, "~/.ssh/id_rsa")
             self.assertTrue(axe.DRY_RUN)
+            self.assertEqual(axe.JOBS, 1)
         finally:
-            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN = original
+            axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN, axe.JOBS = original
 
     def test_main_reports_missing_option_value(self):
         with mock.patch("builtins.print") as mocked_print:
             exit_code = axe.main(["--timeout"])
         self.assertEqual(exit_code, 1)
-        mocked_print.assert_called_once_with("Failed: Missing value for --timeout.")
+        mocked_print.assert_called_once_with("Failed: argument --timeout: expected one argument")
+
+    def test_main_rejects_invalid_jobs(self):
+        with mock.patch("builtins.print") as mocked_print:
+            exit_code = axe.main(["--jobs", "0", "2", "-c", "hostname"])
+        self.assertEqual(exit_code, 1)
+        mocked_print.assert_called_once_with("Failed: argument --jobs: must be at least 1")
 
     def test_main_rejects_command_without_hosts(self):
         with mock.patch("builtins.print") as mocked_print:
@@ -166,6 +172,21 @@ class AxeTests(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertEqual(scp_mock.call_count, 2)
         mocked_print.assert_any_call("Completed SCP with failures on: 2")
+
+    def test_run_batch_uses_jobs_setting(self):
+        original_jobs = axe.JOBS
+        try:
+            axe.JOBS = 2
+            seen = []
+
+            def worker(host):
+                seen.append(host)
+
+            failures = axe.run_batch(["2", "3"], worker)
+            self.assertEqual(failures, [])
+            self.assertCountEqual(seen, ["2", "3"])
+        finally:
+            axe.JOBS = original_jobs
 
     def test_ssh_command_mode_waits_for_completion(self):
         child = mock.Mock()

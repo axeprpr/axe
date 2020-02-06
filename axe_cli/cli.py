@@ -1,3 +1,4 @@
+import argparse
 import fcntl
 import os
 import platform
@@ -6,6 +7,7 @@ import signal
 import struct
 import sys
 import termios
+from concurrent.futures import ThreadPoolExecutor
 
 import pexpect
 
@@ -25,6 +27,7 @@ HOST_PREFIX = os.environ.get("AXE_HOST_PREFIX", "192.222.1.")
 CONNECT_TIMEOUT = int(os.environ.get("AXE_CONNECT_TIMEOUT", "15"))
 IDENTITY_FILE = os.environ.get("AXE_IDENTITY_FILE")
 DRY_RUN = False
+JOBS = 1
 CURRENT_CHILD = None
 
 
@@ -92,84 +95,53 @@ def normalize_destination(file_path, destination):
     return target_dir
 
 
+class ArgumentParserError(ValueError):
+    pass
+
+
+class AxeArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ArgumentParserError(message)
+
+
+def build_parser():
+    parser = AxeArgumentParser(add_help=False, prog="axe", description="Batch SSH and SCP helper")
+    parser.add_argument("hosts", nargs="*", help="Short host numbers, IPv4 addresses, or domain names")
+    parser.add_argument("-h", "--help", action="store_true", dest="show_help")
+    parser.add_argument("-c", "--command", dest="command")
+    parser.add_argument("-s", "--scp", nargs="+", dest="scp_args")
+    parser.add_argument("--user", default=USER)
+    parser.add_argument("--password", default=PASSWORD)
+    parser.add_argument("--port", default=PORT)
+    parser.add_argument("--host-prefix", dest="host_prefix", default=HOST_PREFIX)
+    parser.add_argument("--timeout", dest="connect_timeout", type=int, default=CONNECT_TIMEOUT)
+    parser.add_argument("--identity", dest="identity_file", default=IDENTITY_FILE)
+    parser.add_argument("--dry-run", action="store_true", default=DRY_RUN)
+    parser.add_argument("--jobs", type=int, default=1)
+    return parser
+
+
 def parse_options(argv):
-    options = {
-        "user": USER,
-        "password": PASSWORD,
-        "port": PORT,
-        "host_prefix": HOST_PREFIX,
-        "connect_timeout": CONNECT_TIMEOUT,
-        "identity_file": IDENTITY_FILE,
-        "dry_run": DRY_RUN,
-    }
-    remaining = []
-    index = 0
-
-    while index < len(argv):
-        token = argv[index]
-        if token in ("-h", "--help"):
-            remaining.append(token)
-            index += 1
-            continue
-        if token == "--dry-run":
-            options["dry_run"] = True
-            index += 1
-            continue
-        if token in ("-c", "-s"):
-            remaining.extend(argv[index:])
-            break
-        if token == "--user":
-            if index + 1 >= len(argv):
-                raise ValueError("Missing value for --user.")
-            options["user"] = argv[index + 1]
-            index += 2
-            continue
-        if token == "--password":
-            if index + 1 >= len(argv):
-                raise ValueError("Missing value for --password.")
-            options["password"] = argv[index + 1]
-            index += 2
-            continue
-        if token == "--port":
-            if index + 1 >= len(argv):
-                raise ValueError("Missing value for --port.")
-            options["port"] = argv[index + 1]
-            index += 2
-            continue
-        if token == "--host-prefix":
-            if index + 1 >= len(argv):
-                raise ValueError("Missing value for --host-prefix.")
-            options["host_prefix"] = argv[index + 1]
-            index += 2
-            continue
-        if token == "--timeout":
-            if index + 1 >= len(argv):
-                raise ValueError("Missing value for --timeout.")
-            options["connect_timeout"] = int(argv[index + 1])
-            index += 2
-            continue
-        if token == "--identity":
-            if index + 1 >= len(argv):
-                raise ValueError("Missing value for --identity.")
-            options["identity_file"] = argv[index + 1]
-            index += 2
-            continue
-        remaining.append(token)
-        index += 1
-
-    return options, remaining
+    parser = build_parser()
+    namespace = parser.parse_intermixed_args(argv)
+    if namespace.jobs < 1:
+        raise ArgumentParserError("argument --jobs: must be at least 1")
+    if namespace.command and namespace.scp_args:
+        raise ArgumentParserError("argument -s/--scp: not allowed with argument -c/--command")
+    return namespace
 
 
 def apply_runtime_options(options):
-    global USER, PASSWORD, PORT, HOST_PREFIX, CONNECT_TIMEOUT, IDENTITY_FILE, DRY_RUN
+    global USER, PASSWORD, PORT, HOST_PREFIX, CONNECT_TIMEOUT, IDENTITY_FILE, DRY_RUN, JOBS
 
-    USER = options["user"]
-    PASSWORD = options["password"]
-    PORT = str(options["port"])
-    HOST_PREFIX = options["host_prefix"]
-    CONNECT_TIMEOUT = int(options["connect_timeout"])
-    IDENTITY_FILE = options["identity_file"]
-    DRY_RUN = bool(options["dry_run"])
+    USER = options.user
+    PASSWORD = options.password
+    PORT = str(options.port)
+    HOST_PREFIX = options.host_prefix
+    CONNECT_TIMEOUT = int(options.connect_timeout)
+    IDENTITY_FILE = options.identity_file
+    DRY_RUN = bool(options.dry_run)
+    JOBS = int(options.jobs)
 
 
 def expect_and_send_password(child, password):
@@ -315,6 +287,28 @@ def astute_scp(ip, file_path, destination=None):
     scp(USER, PASSWORD, resolve_host(ip), file_path, destination=destination, identity_file=IDENTITY_FILE)
 
 
+def run_batch(hosts, worker):
+    failures = []
+    if JOBS <= 1 or len(hosts) <= 1:
+        for host in hosts:
+            try:
+                worker(host)
+            except Exception as exc:
+                print("Failed: {}".format(exc))
+                failures.append({"host": str(host), "error": str(exc)})
+        return failures
+
+    with ThreadPoolExecutor(max_workers=JOBS) as executor:
+        futures = {host: executor.submit(worker, host) for host in hosts}
+        for host, future in futures.items():
+            try:
+                future.result()
+            except Exception as exc:
+                print("Failed: {}".format(exc))
+                failures.append({"host": str(host), "error": str(exc)})
+    return failures
+
+
 def run_scp(hosts, command):
     if not hosts:
         print("Failed. No host specified for SCP.")
@@ -328,7 +322,6 @@ def run_scp(hosts, command):
         print("Failed. No such file or directory: {}".format(file_path))
         return 1
 
-    failures = []
     for host in hosts:
         if len(command) == 1:
             destination = None
@@ -337,11 +330,7 @@ def run_scp(hosts, command):
             destination = normalize_destination(file_path, command[1])
             print("\033[41;1m SCP {} to host-{} to {}\033[0m".format(file_path, host, destination))
         print("----------------------------")
-        try:
-            astute_scp(host, file_path, destination=destination)
-        except Exception as exc:
-            print("Failed: {}".format(exc))
-            failures.append({"host": str(host), "error": str(exc)})
+    failures = run_batch(hosts, lambda host: astute_scp(host, file_path, destination=destination))
     return print_batch_summary("SCP", hosts, failures)
 
 
@@ -353,47 +342,39 @@ def run_command(hosts, command):
         print(HELP, end="")
         return 1
 
-    failures = []
     for host in hosts:
         print("\033[41;1m Run command {} in host-{}\033[0m".format(command[0], host))
         print("----------------------------")
-        try:
-            astute_ssh(host, command[0])
-        except Exception as exc:
-            print("Failed: {}".format(exc))
-            failures.append({"host": str(host), "error": str(exc)})
+    failures = run_batch(hosts, lambda host: astute_ssh(host, command[0]))
     return print_batch_summary("command execution", hosts, failures)
 
 
 def main(argv=None):
     parameter = list(sys.argv[1:] if argv is None else argv)
     try:
-        options, parameter = parse_options(parameter)
+        options = parse_options(parameter)
         apply_runtime_options(options)
-    except ValueError as exc:
+    except ArgumentParserError as exc:
         print("Failed: {}".format(exc))
         return 1
 
-    if not parameter or parameter == ["-h"] or parameter == ["--help"]:
+    if options.show_help or (not options.hosts and not options.command and not options.scp_args):
         print(HELP, end="")
         return 0
 
-    if len(parameter) == 1:
+    if len(options.hosts) == 1 and not options.command and not options.scp_args:
         try:
-            astute_ssh(parameter[0])
+            astute_ssh(options.hosts[0])
         except Exception as exc:
             print("Failed: {}".format(exc))
             return 1
         return 0
 
-    if "-s" in parameter and "-c" not in parameter:
-        flag_position = parameter.index("-s")
-        return run_scp(parameter[:flag_position], parameter[(flag_position + 1) :])
+    if options.scp_args is not None and options.command is None:
+        return run_scp(options.hosts, options.scp_args)
 
-    if "-c" in parameter and "-s" not in parameter:
-        flag_position = parameter.index("-c")
-        return run_command(parameter[:flag_position], parameter[(flag_position + 1) :])
+    if options.command is not None and options.scp_args is None:
+        return run_command(options.hosts, [options.command])
 
     print(HELP, end="")
     return 1
-
