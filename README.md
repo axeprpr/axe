@@ -119,9 +119,89 @@ axe --user admin --port 2222 --host-prefix '10.20.30.' --timeout 10 12 -c 'hostn
 - `--dry-run`
 - `--jobs`
 
+## Common Scenarios
+
+### 登录单台短主机号机器
+
+```bash
+axe 12
+```
+
+等价于连接：
+
+```text
+ssh $AXE_USER@192.222.1.12 -p $AXE_PORT
+```
+
+### 给一组机器执行同一条巡检命令
+
+```bash
+axe 2 3 4 5 -c 'uptime'
+```
+
+### 先预览，再真正执行批量命令
+
+```bash
+axe --dry-run 2 3 4 -c 'df -h'
+axe 2 3 4 -c 'df -h'
+```
+
+### 通过私钥连接一组机器
+
+```bash
+axe --identity '~/.ssh/id_rsa' 2 3 4 -c 'hostname'
+```
+
+### 并发分发构建产物
+
+```bash
+axe --jobs 4 2 3 4 5 -s './release.tar.gz' '/srv/app/'
+```
+
 ## Notes
 
 - `--dry-run` 只输出将要执行的目标和参数，不会真的连接远端。
 - `--jobs N` 只作用于批量 `-c` 和 `-s` 场景。
 - 批量执行结束后会输出成功/失败汇总。
 - 如果远端仍要求密码，工具会继续按当前配置尝试密码交互。
+
+## FAQ
+
+### 为什么 `axe 12` 会连到 `192.222.1.12`？
+
+因为默认会把 `1` 到 `250` 的短主机号拼接到 `AXE_HOST_PREFIX` 后面。默认前缀是 `192.222.1.`。
+
+### 如果我想换成别的网段前缀怎么办？
+
+设置环境变量或命令行参数：
+
+```bash
+export AXE_HOST_PREFIX='10.20.30.'
+axe 12
+```
+
+或者：
+
+```bash
+axe --host-prefix '10.20.30.' 12
+```
+
+### 如果我不想真的执行，只想看会发生什么？
+
+使用 `--dry-run`：
+
+```bash
+axe --dry-run 2 3 4 -c 'systemctl restart nginx'
+```
+
+### 如果批量机器很多，执行太慢怎么办？
+
+可以提高并发数：
+
+```bash
+axe --jobs 8 2 3 4 5 6 7 8 9 -c 'uptime'
+```
+
+### 支持密码和私钥混用吗？
+
+可以。配置了 `--identity` 或 `AXE_IDENTITY_FILE` 时会优先带上私钥；如果远端仍然要求密码，工具会继续处理密码交互。
