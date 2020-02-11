@@ -34,6 +34,32 @@ python3 -m pip install .
 axe --help
 ```
 
+## Release
+
+仓库现在包含 GitHub Actions：
+
+- `CI`：在 `push` 和 `pull_request` 时运行测试并验证 Python 构建
+- `Release`：在推送 `v*` tag 时自动构建发布产物
+
+发布流程会生成：
+
+- Python `sdist`
+- Python `wheel`
+- `.deb` 包
+- `.rpm` 包
+
+Linux 包发布会输出常见架构标签：
+
+- Debian: `amd64`, `arm64`
+- RPM: `x86_64`, `aarch64`
+
+触发方式示例：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Quick Start
 
 ```bash
@@ -54,7 +80,7 @@ axe 2 3 4 -s './app.tar.gz' '/srv/app/'
 
 ```bash
 export AXE_USER=root
-export AXE_PASSWORD='donotuseroot!'
+export AXE_PASSWORD='your-password'
 export AXE_PORT=22
 export AXE_HOST_PREFIX='192.222.1.'
 export AXE_CONNECT_TIMEOUT=15
@@ -64,7 +90,7 @@ export AXE_IDENTITY_FILE='~/.ssh/id_rsa'
 说明：
 
 - `AXE_USER`：登录用户名
-- `AXE_PASSWORD`：密码登录时使用的密码
+- `AXE_PASSWORD`：密码登录时使用的密码，不提供时不会自动发送空密码
 - `AXE_PORT`：SSH 端口
 - `AXE_HOST_PREFIX`：短主机号前缀，例如 `192.222.1.`
 - `AXE_CONNECT_TIMEOUT`：等待连接和密码提示的超时时间，单位秒
@@ -164,6 +190,7 @@ axe --jobs 4 2 3 4 5 -s './release.tar.gz' '/srv/app/'
 - `--jobs N` 只作用于批量 `-c` 和 `-s` 场景。
 - 批量执行结束后会输出成功/失败汇总。
 - 如果远端仍要求密码，工具会继续按当前配置尝试密码交互。
+- 不再提供任何内置默认密码，需要显式设置 `AXE_PASSWORD` 或传入 `--password`。
 
 ## FAQ
 

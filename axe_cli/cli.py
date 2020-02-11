@@ -11,6 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pexpect
 
+from axe_cli import __version__
+
 
 HELP = """help:
 axe 1 ==> ssh root@192.222.1.1 (use root password of astute)
@@ -21,7 +23,7 @@ axe 2 3 4 -s './test' ==> scp file to host002/3/4 to the same place
 """
 
 USER = os.environ.get("AXE_USER", "root")
-PASSWORD = os.environ.get("AXE_PASSWORD", "donotuseroot!")
+PASSWORD = os.environ.get("AXE_PASSWORD")
 PORT = os.environ.get("AXE_PORT", "22")
 HOST_PREFIX = os.environ.get("AXE_HOST_PREFIX", "192.222.1.")
 CONNECT_TIMEOUT = int(os.environ.get("AXE_CONNECT_TIMEOUT", "15"))
@@ -108,6 +110,7 @@ def build_parser():
     parser = AxeArgumentParser(add_help=False, prog="axe", description="Batch SSH and SCP helper")
     parser.add_argument("hosts", nargs="*", help="Short host numbers, IPv4 addresses, or domain names")
     parser.add_argument("-h", "--help", action="store_true", dest="show_help")
+    parser.add_argument("--version", action="store_true")
     parser.add_argument("-c", "--command", dest="command")
     parser.add_argument("-s", "--scp", nargs="+", dest="scp_args")
     parser.add_argument("--user", default=USER)
@@ -150,6 +153,9 @@ def expect_and_send_password(child, password):
         timeout=CONNECT_TIMEOUT,
     )
     if match_index == 0:
+        if not password:
+            child.close()
+            raise RuntimeError("Password prompt received but no password is configured.")
         child.sendline(password)
         return
     if match_index == 1:
@@ -357,6 +363,10 @@ def main(argv=None):
     except ArgumentParserError as exc:
         print("Failed: {}".format(exc))
         return 1
+
+    if options.version:
+        print(__version__)
+        return 0
 
     if options.show_help or (not options.hosts and not options.command and not options.scp_args):
         print(HELP, end="")

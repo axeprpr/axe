@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from axe_cli import __version__
 from axe_cli import cli as axe
 
 
@@ -21,6 +22,13 @@ class AxeTests(unittest.TestCase):
 
             reloaded = importlib.reload(axe)
         self.assertEqual(reloaded.CONNECT_TIMEOUT, 21)
+
+    def test_password_defaults_to_none_when_not_configured(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            import importlib
+
+            reloaded = importlib.reload(axe)
+        self.assertIsNone(reloaded.PASSWORD)
 
     def test_parse_options_supports_cli_overrides(self):
         options = axe.parse_options(
@@ -93,6 +101,12 @@ class AxeTests(unittest.TestCase):
             exit_code = axe.main(["--help"])
         self.assertEqual(exit_code, 0)
         mocked_print.assert_called_once_with(axe.HELP, end="")
+
+    def test_version_flag_prints_version(self):
+        with mock.patch("builtins.print") as mocked_print:
+            exit_code = axe.main(["--version"])
+        self.assertEqual(exit_code, 0)
+        mocked_print.assert_called_once_with(__version__)
 
     def test_main_applies_cli_overrides_before_running(self):
         original = (axe.USER, axe.PASSWORD, axe.PORT, axe.HOST_PREFIX, axe.CONNECT_TIMEOUT, axe.IDENTITY_FILE, axe.DRY_RUN, axe.JOBS)
@@ -233,6 +247,13 @@ class AxeTests(unittest.TestCase):
             timeout=27,
         )
         child.sendline.assert_called_once_with("secret")
+
+    def test_expect_and_send_password_requires_configured_password(self):
+        child = mock.Mock()
+        child.expect.return_value = 0
+        with self.assertRaisesRegex(RuntimeError, "no password is configured"):
+            axe.expect_and_send_password(child, None)
+        child.close.assert_called_once()
 
     def test_expect_and_send_password_classifies_auth_failure(self):
         child = mock.Mock()
