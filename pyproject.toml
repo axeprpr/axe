@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Batch SSH and SCP helper built on pexpect"
 readme = "README.md"
 requires-python = ">=3.8"
+authors = [{ name = "axe contributors" }]
 
 [project.scripts]
 axe = "axe_cli.cli:main"

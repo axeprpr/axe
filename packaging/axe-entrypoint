@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PYTHONPATH="/usr/lib/axe${PYTHONPATH:+:${PYTHONPATH}}"
+exec python3 -m axe_cli.cli "$@"
