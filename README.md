@@ -53,6 +53,8 @@ Linux 包发布会输出常见架构标签：
 - Debian: `amd64`, `arm64`
 - RPM: `x86_64`, `aarch64`
 
+版本变化记录见 [CHANGELOG.md](./CHANGELOG.md)。
+
 触发方式示例：
 
 ```bash
