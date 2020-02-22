@@ -14,9 +14,6 @@ mkdir -p "${out_dir}/usr/lib/axe"
 mkdir -p "${out_dir}/usr/bin"
 
 cp -R "${repo_root}/axe_cli" "${out_dir}/usr/lib/axe/"
-cp -R "${repo_root}/pexpect" "${out_dir}/usr/lib/axe/"
-cp -R "${repo_root}/ptyprocess" "${out_dir}/usr/lib/axe/"
 cp "${repo_root}/packaging/axe-entrypoint" "${out_dir}/usr/bin/axe"
 
 chmod 0755 "${out_dir}/usr/bin/axe"
-

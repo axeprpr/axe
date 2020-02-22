@@ -12,6 +12,8 @@
 - `--dry-run` 预览
 - `--jobs N` 并发执行
 
+从当前版本开始，`pexpect` 作为外部依赖提供，不再 vendoring 到仓库中。
+
 ## Requirements
 
 - `python3`
@@ -33,6 +35,8 @@
 python3 -m pip install .
 axe --help
 ```
+
+如果你在系统包环境中安装 `.deb` 或 `.rpm`，对应包会声明 `python3-pexpect` 依赖，而不是把第三方源码直接打进项目源码目录。
 
 ## Release
 

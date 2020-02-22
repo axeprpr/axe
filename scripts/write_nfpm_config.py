@@ -28,6 +28,7 @@ contents:
       mode: 0755
 depends:
   - python3
+  - python3-pexpect
 """
     if package_format == "rpm":
         config += "rpm:\n  compression: gzip\n"

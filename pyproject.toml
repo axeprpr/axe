@@ -9,6 +9,7 @@ description = "Batch SSH and SCP helper built on pexpect"
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [{ name = "axe contributors" }]
+dependencies = ["pexpect>=4.8,<5"]
 
 [project.scripts]
 axe = "axe_cli.cli:main"
@@ -17,4 +18,4 @@ axe = "axe_cli.cli:main"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["axe_cli", "pexpect", "ptyprocess"]
+include = ["axe_cli"]
