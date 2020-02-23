@@ -105,11 +105,31 @@ jobs:
           name: linux-packages-${{ matrix.package_format }}-${{ matrix.package_arch }}
           path: dist/packages/*
 
+  build-offline-bundle:
+    needs: build-python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build offline bundle
+        run: |
+          mkdir -p dist/offline
+          bundle_dir="dist/offline/axe-cli-${{ needs.build-python.outputs.version }}-linux-any"
+          bash scripts/prepare_offline_bundle.sh "${bundle_dir}"
+          tar -C dist/offline -czf "dist/offline/axe-cli_${{ needs.build-python.outputs.version }}_linux_any_offline.tar.gz" "$(basename "${bundle_dir}")"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-bundle
+          path: dist/offline/*.tar.gz
+
   publish-release:
     if: startsWith(github.ref, 'refs/tags/')
     needs:
       - build-python
       - build-linux-packages
+      - build-offline-bundle
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -132,6 +152,7 @@ jobs:
             echo "- Python wheel"
             echo "- Debian packages: amd64, arm64"
             echo "- RPM packages: x86_64, aarch64"
+            echo "- Offline bundle tarball with bundled Python dependencies"
           } > RELEASE_NOTES.md
       - uses: softprops/action-gh-release@v2
         with:

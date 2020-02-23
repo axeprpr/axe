@@ -38,6 +38,8 @@ axe --help
 
 如果你在系统包环境中安装 `.deb` 或 `.rpm`，对应包会声明 `python3-pexpect` 依赖，而不是把第三方源码直接打进项目源码目录。
 
+如果你需要在离线环境里部署，也可以使用发布流程生成的离线 `tar.gz` 包。它会把 Python 依赖一起打进去，但目标机器仍需要可用的 `python3`。
+
 ## Release
 
 仓库现在包含 GitHub Actions：
@@ -51,6 +53,7 @@ axe --help
 - Python `wheel`
 - `.deb` 包
 - `.rpm` 包
+- 离线自包含 `tar.gz` 包
 
 Linux 包发布会输出常见架构标签：
 
