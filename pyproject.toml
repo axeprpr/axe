@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "axe-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "Batch SSH and SCP helper built on pexpect"
 readme = "README.md"
 requires-python = ">=3.8"

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- Replaced vendored `pexpect` and `ptyprocess` copies with external package dependencies.
+- Added an offline self-contained bundle artifact to the release pipeline.
+- Tightened release automation and package dependency handling.
+
 ## 0.1.0
 
 - Ported the tool to Python 3 and stabilized terminal handling.

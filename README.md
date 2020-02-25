@@ -65,8 +65,8 @@ Linux 包发布会输出常见架构标签：
 触发方式示例：
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 ## Quick Start
